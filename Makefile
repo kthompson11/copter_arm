@@ -23,7 +23,7 @@ BIN  = $(CP) -O binary -S
 INCDIRS  = ./src \
            ./src/CMSIS/Include \
            ./src/CMSIS/ST \
-           ./src/FreeRTOS/Source/portable/GCC/ARM_CM7 \
+           ./src/FreeRTOS/Source/portable/GCC/ARM_CM4F \
            ./src/FreeRTOS/Source/portable/MemMang \
            ./src/FreeRTOS/Source/include
 INCDIRS  := $(patsubst %,-I%, $(INCDIRS))
@@ -34,18 +34,18 @@ OUT_NAME = $(OUTDIR)/$(PROJECT)
 SRC := $(wildcard src/*.c) \
        src/CMSIS/ST/system_stm32f7xx.c \
        $(wildcard src/FreeRTOS/Source/*.c) \
-       $(wildcard src/FreeRTOS/Source/portable/GCC/ARM_CM0/*.c) \
+       $(wildcard src/FreeRTOS/Source/portable/GCC/ARM_CM4F/*.c) \
        $(wildcard src/FreeRTOS/Source/portable/MemMang/*.c)
 
 # Objects
 OBJ = $(SRC:%.c=%.o) src/CMSIS/ST/startup_stm32f767xx.o
 LST = $(OBJ:%.o=%.lst)
 
-LIB_DIR = /usr/lib/arm-none-eabi/lib/thumb/v6-m/nofp
+LIB_DIR = /usr/lib/arm-none-eabi/lib/thumb/v7e-m+fp/hard
 
 # Flags
 MCU  = cortex-m7
-MCFLAGS = -mcpu=$(MCU)
+MCFLAGS = -mcpu=$(MCU) -mfloat-abi=hard
 DEBUG_FLAGS = -gdwarf-2
 ASFLAGS = $(MCFLAGS) $(DEBUG_FLAGS) -mthumb  -Wa,-amhls=$(<:%.s=%.lst)
 CFLAGS = $(MCFLAGS) -D $(MCU_DEFINE) $(DEBUG_FLAGS) -O0 -falign-functions=4 -mthumb -fomit-frame-pointer -Wall -Wstrict-prototypes -fverbose-asm -Wa,-ahlms=$(<:%.c=%.lst) $(DEFS)
