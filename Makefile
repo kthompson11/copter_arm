@@ -19,6 +19,7 @@ CP   = $(CCPREFIX)objcopy
 AS   = $(CCPREFIX)gcc -x assembler-with-cpp
 HEX  = $(CP) -O ihex
 BIN  = $(CP) -O binary -S
+GDB  = $(CCPREFIX)gdb
 
 INCDIRS  = ./src \
            ./src/CMSIS/Include \
@@ -73,6 +74,9 @@ flash: all
 
 %.o : %.s
 	$(AS) -c $(ASFLAGS) $< -o $@
+
+debug : 
+	$(GDB) -tui --eval-command="target extended-remote localhost:4242" out/$(PROJECT).elf -ex 'load'
 
 clean :
 	rm -f $(OBJ)

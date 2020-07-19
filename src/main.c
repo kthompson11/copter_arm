@@ -4,6 +4,8 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
+#include "usart.h"
+
 void blink_task(void *param)
 {
     for (;;) {
@@ -25,6 +27,7 @@ int main(void)
     GPIOB->ODR |= GPIO_ODR_ODR_0;
 
     xTaskCreate(blink_task, "blink", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+    xTaskCreate(usart_task, "usart", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
 
     vTaskStartScheduler();
 
