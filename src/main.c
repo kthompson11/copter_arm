@@ -5,6 +5,7 @@
 #include <task.h>
 
 #include "usart.h"
+#include "copter.h"
 
 void blink_task(void *param)
 {
@@ -27,6 +28,7 @@ int main(void)
     GPIOB->ODR |= GPIO_ODR_ODR_0;
 
     xTaskCreate(blink_task, "blink", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+    xTaskCreate(copter_task, "copter", 1024, NULL, 2, NULL);
     xTaskCreate(usart_task, "usart", configMINIMAL_STACK_SIZE, NULL, 3, NULL);
 
     vTaskStartScheduler();

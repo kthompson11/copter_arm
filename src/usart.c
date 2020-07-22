@@ -6,6 +6,7 @@
 #include <task.h>
 
 #include "usart.h"
+#include "copter.h"
 
 /**
  * Sets the baud rate assuming oversampling by 16 and SYSCLK is used as clock source
@@ -17,9 +18,53 @@ void usart_set_baud_rate(unsigned long rate_hz)
     USART3->BRR = sysclk_frequency / rate_hz;
 }
 
+int sprint_uint(char *buf, uint32_t n)
+{
+    if (n == 0) {
+        *buf = '0';
+        return 1;
+    }
+
+    const char characters[] = "0123456789";
+    int j = 0;
+    int bytes_written;
+    uint32_t remaining_n = n;
+
+    while (remaining_n > 0) {
+        int digit = remaining_n % 10;
+        remaining_n /= 10;
+        
+        buf[j] = characters[digit];
+        j += 1;
+    }
+    bytes_written = j;
+
+    /* reverse string */
+    int i;
+    for (i = 0, --j; i <= j; ++i, --j) {
+        char tmp;
+        tmp = buf[i];
+        buf[i] = buf[j];
+        buf[j] = tmp;
+    }
+
+    return bytes_written;
+}
+
+int sprint_int(char *buf, int32_t n)
+{
+    if (n < 0) {
+        *buf = '-';
+        return sprint_uint(buf + 1, -n) + 1;
+    } else {
+        return sprint_uint(buf, n);
+    }
+}
+
 void usart_task(void *param)
 {
-    const char *message = "Hello World!\n\r";
+    char message[100];
+    //const char *message = "0";
 
     /* setup DMA */
     RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;  /* enable DMA1 clock */
@@ -44,12 +89,15 @@ void usart_task(void *param)
 
     for (;;) {
         while (DMA1_Stream3->CR & DMA_SxCR_EN) {}  /* wait until DMA is done */
+        int n_bytes = sprint_uint(message, LastADCValue);
+        message[n_bytes] = '\n';
+        message[n_bytes+1] = '\0';
         DMA1_Stream3->M0AR = (volatile uint32_t)message;  /* reset source address */
-        DMA1_Stream3->NDTR = (uint32_t)strlen(message);  /* reset data length */
+        DMA1_Stream3->NDTR = strlen(message);  /* reset data length */
         USART3->ICR = USART_ICR_TCCF;
         DMA1->LIFCR = 0x3DUL << DMA_LIFCR_CFEIF3_Pos;  /* clear all interrupt flags for stream 3 */
         DMA1_Stream3->CR |= DMA_SxCR_EN;
 
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
