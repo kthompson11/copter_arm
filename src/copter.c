@@ -4,6 +4,7 @@
 #include <task.h>
 
 #include "copter.h"
+#include "pid_control.h"
 
 uint16_t LastADCValue;
 
@@ -38,33 +39,24 @@ void copter_task(void *param)
     TIM5->CCER |= TIM_CCER_CC1E;
     TIM5->CR1 |= TIM_CR1_CEN;
 
-    /* controller variables and constants*/
-    int32_t T_ms = 10;
-    int32_t f_controller = 1000 / T_ms;
-    int32_t c_direct = TIMER_MAX_COUNT * 17 / 100;
-    /* proportional control constants */
-    int32_t kp_mul = 1;
-    int32_t kp_div = 4;
-    /* integral control contstants */
-    int32_t ki_mul = 1;
-    int32_t ki_div = 80;
-    const int32_t MAXSUM = ki_div * f_controller * TIMER_MAX_COUNT / ki_mul / 6;
-    const int32_t MINSUM = -MAXSUM;
-    /* derivative control constants */
-    int32_t kd_mul = 1;
-    int32_t kd_div = 2;
-    /* controller input and state */
-    int32_t x_d = 2400;
-    int32_t sum = 0;
-    int32_t x = 0;
-    int32_t x_last = 0;
+    const float KI = 0.1;
+    struct pid_state state = {
+        .KP = 0.2,
+        .KI = KI,
+        .KD = 0.2,
+        .T = 0.01,
+        .MAXSUM = 0.3 * TIMER_MAX_COUNT / KI,
+        .MINSUM = -0.3 * TIMER_MAX_COUNT / KI,
+        .DERIV_INTERVAL = 1,
+    };
+    int32_t x_d = 2300;
 
     for (;;) {
         /* get arm angle value */
         ADC1->CR2 |= ADC_CR2_ADON;
 
         uint32_t adc_value = 0;
-        const int N_ADC_TERMS = 5;
+        const int N_ADC_TERMS = 10;
         for (int i = 0; i < N_ADC_TERMS; ++i) {
             ADC1->CR2 |= ADC_CR2_SWSTART;
             while (!(ADC1->SR & ADC_SR_EOC)) {}  /* wait for end of conversion */
@@ -74,28 +66,18 @@ void copter_task(void *param)
         adc_value /= N_ADC_TERMS;
         LastADCValue = adc_value;
 
-        x_last = x;
-        x = adc_value;
+        /* calculate error */
+        int32_t x = adc_value;
+        float error = x_d - x;
 
-        /* calculate controller output */
-        int32_t error = x_d - x;
-        sum = sum + error;
-        if (sum > MAXSUM) {
-            sum = MAXSUM;
-        } else if (sum < MINSUM) {
-            sum = MINSUM;
+        /* get next controller output */
+        float output = pid_tick(&state, error);
+        if (output > TIMER_MAX_COUNT) {
+            output = TIMER_MAX_COUNT;
+        } else if (output < 0) {
+            output = 0;
         }
-
-        int32_t c_i = sum * ki_mul / ki_div / f_controller;
-        int32_t c_p = error * kp_mul / kp_div;
-        int32_t c_d = (x_last - x) * f_controller * kd_mul / kd_div;
-
-        int32_t c = c_i + c_p + c_d + c_direct;
-        if (c < 0) {
-            c = 0;
-        } else if (c > TIMER_MAX_COUNT) {
-            c = TIMER_MAX_COUNT;
-        }
+        uint32_t c = output;
 
         /* set motor pwm */
         TIM5->CCR1 = c;
