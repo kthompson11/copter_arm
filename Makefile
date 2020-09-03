@@ -52,6 +52,9 @@ ASFLAGS = $(MCFLAGS) $(DEBUG_FLAGS) -mthumb  -Wa,-amhls=$(<:%.s=%.lst)
 CFLAGS = $(MCFLAGS) -D $(MCU_DEFINE) $(DEBUG_FLAGS) -O0 -falign-functions=4 -mthumb -fomit-frame-pointer -Wall -Wstrict-prototypes -fverbose-asm -Wa,-ahlms=$(<:%.c=%.lst) $(DEFS)
 LDFLAGS = $(MCFLAGS) $(DEBUG_FLAGS) -mthumb -nostartfiles --specs=nosys.specs --specs=nano.specs -Wl,-Map=$(OUTDIR)/$(PROJECT).map,--cref,--no-warn-mismatch,--gc-sections -L$(LIB_DIR)
 
+# Test Objects
+TEST_OBJ = $(wildcard test/*.c)
+
 
 # Rules
 all : $(OBJ) $(OUT_NAME).elf $(OUT_NAME).hex $(OUT_NAME).bin
@@ -78,10 +81,14 @@ flash: all
 debug : 
 	$(GDB) -tui --eval-command="target extended-remote localhost:4242" out/$(PROJECT).elf -ex 'load'
 
+test :
+	cd tests && cmake -S . -B build/ && cd build && make && ctest
+
 clean :
 	rm -f $(OBJ)
 	rm -f $(LST)
 	rm -rf $(OUTDIR)/$(PROJECT).{elf,hex,bin,map}
+	rm -rf tests/build
 
 # Create output directories if they don't already exist.
 $(shell mkdir -p $(OUTDIR))
