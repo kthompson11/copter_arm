@@ -21,6 +21,8 @@ void DMA1_Stream3_IRQHandler(void)
         xSemaphoreGiveFromISR(tx_done, &context_switch);
     }
 
+    DMA1->LIFCR = 0x3DUL << DMA_LIFCR_CFEIF3_Pos;  /* clear all interrupt flags for stream 3 */
+
     portYIELD_FROM_ISR(context_switch);
 }
 
@@ -142,17 +144,15 @@ void usart_task(void *_param)
         xQueueSend(param->tx_pool, &tx_buffer, portMAX_DELAY);
 
         /* send buffer using DMA */
-        DMA1_Stream3->M0AR = (volatile uint32_t)tmp_buffer;
-        DMA1_Stream3->NDTR = (volatile uint32_t)bs_len;
-        /* DMA1_Stream3->CR |= DMA_SxCR_TCIE; */
+        DMA1_Stream3->M0AR = (uint32_t)tmp_buffer;
+        DMA1_Stream3->NDTR = (uint32_t)bs_len;
+        DMA1_Stream3->CR |= DMA_SxCR_TCIE;
         NVIC_EnableIRQ(DMA1_Stream3_IRQn);
         USART3->ICR = USART_ICR_TCCF;
-        DMA1->LIFCR = 0x3DUL << DMA_LIFCR_CFEIF3_Pos;  /* clear all interrupt flags for stream 3 */
-        DMA1_Stream3->CR |= DMA_SxCR_EN;
+        
+        xSemaphoreTake(param->tx_done, 0);  /* reset tx_done */
+        DMA1_Stream3->CR |= DMA_SxCR_EN;  /* start tx */
         /* wait for tx done signal */
-        /* TODO: switch to interrupts */
-        /* xSemaphoreTake(tx_done, portMAX_DELAY); */
-
-        while (DMA1_Stream3->CR & DMA_SxCR_EN) {}  /* wait until DMA is done */
+        xSemaphoreTake(tx_done, portMAX_DELAY);
     }
 }
