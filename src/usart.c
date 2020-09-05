@@ -6,7 +6,23 @@
 #include <task.h>
 
 #include "usart.h"
-#include "copter.h"
+#include "crc32.h"
+#include "cobs.h"
+
+/* TODO: rework so that multiple instantiations of usart can be used at a time (no globals, reentrant, choice of crc/framing, etc. */
+static SemaphoreHandle_t tx_done;
+
+void DMA1_Stream3_IRQHandler(void)
+{
+    BaseType_t context_switch = pdFALSE;
+
+    if (DMA1->LISR & DMA_LISR_TCIF3) {
+        /* send tx done signal */
+        xSemaphoreGiveFromISR(tx_done, &context_switch);
+    }
+
+    portYIELD_FROM_ISR(context_switch);
+}
 
 /**
  * Sets the baud rate assuming oversampling by 16 and SYSCLK is used as clock source
@@ -61,10 +77,30 @@ int sprint_int(char *buf, int32_t n)
     }
 }
 
-void usart_task(void *param)
+void usart_task(void *_param)
 {
-    char message[100];
-    //const char *message = "0";
+    struct usart_task_param *param = (struct usart_task_param *)_param;
+
+    /* set semaphore used when a tx finishes */
+    tx_done = param->tx_done;
+
+    /* create tx buffers and fill up tx pool */
+    struct usart_buffer *tx_buffers = pvPortMalloc(param->tx_pool_size * sizeof(struct usart_buffer));
+    for (int i = 0; i < param->tx_pool_size; ++i) {
+        /* should always succeed if pool queues are properly sized */
+        struct usart_buffer *next_buffer = tx_buffers + i;
+        xQueueSend(param->tx_pool, &next_buffer, 0);
+    }
+
+    #ifdef COMMENTED_OUT
+    /* create rx buffers and fill up rx pool */
+    struct usart_buffer *rx_buffers = pvPortMalloc(param->rx_pool_size * sizeof(struct usart_buffer));
+    for (int i = 0; i < param->rx_pool_size; ++i) {
+        /* should always succeed if pool queues are properly sized */
+        struct usart_buffer *next_buffer = rx_buffers + i;
+        xQueueSend(param->rx_pool, &next_buffer + i, 0);
+    }
+    #endif
 
     /* setup DMA */
     RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;  /* enable DMA1 clock */
@@ -87,17 +123,36 @@ void usart_task(void *param)
     USART3->CR3 |= USART_CR3_DMAT;
     USART3->CR1 |= USART_CR1_TE;
 
+    struct usart_buffer *tx_buffer;
+    uint8_t tmp_buffer[USART_BUFFER_SIZE]; /* for calculating crc32 and cobs */
+
     for (;;) {
-        while (DMA1_Stream3->CR & DMA_SxCR_EN) {}  /* wait until DMA is done */
-        int n_bytes = sprint_uint(message, LastADCValue);
-        message[n_bytes] = '\n';
-        message[n_bytes+1] = '\0';
-        DMA1_Stream3->M0AR = (volatile uint32_t)message;  /* reset source address */
-        DMA1_Stream3->NDTR = strlen(message);  /* reset data length */
+        xQueueReceive(param->tx_queue, &tx_buffer, portMAX_DELAY);
+        /* get CRC32 */
+        uint32_t crc = crc32(tx_buffer->data, tx_buffer->len);
+        /* copy crc to buffer MSB first */
+        tx_buffer->data[tx_buffer->len] = crc >> 24;
+        tx_buffer->data[tx_buffer->len + 1] = crc >> 16;
+        tx_buffer->data[tx_buffer->len + 2] = crc >> 8;
+        tx_buffer->data[tx_buffer->len + 3] = crc;
+        tx_buffer->len += 4;
+        /* byte stuff packet */
+        int bs_len = cobs_stuff(tx_buffer->data, tmp_buffer, tx_buffer->len);
+        /* return tx_buffer to tx buffer pool */
+        xQueueSend(param->tx_pool, &tx_buffer, portMAX_DELAY);
+
+        /* send buffer using DMA */
+        DMA1_Stream3->M0AR = (volatile uint32_t)tmp_buffer;
+        DMA1_Stream3->NDTR = (volatile uint32_t)bs_len;
+        /* DMA1_Stream3->CR |= DMA_SxCR_TCIE; */
+        NVIC_EnableIRQ(DMA1_Stream3_IRQn);
         USART3->ICR = USART_ICR_TCCF;
         DMA1->LIFCR = 0x3DUL << DMA_LIFCR_CFEIF3_Pos;  /* clear all interrupt flags for stream 3 */
         DMA1_Stream3->CR |= DMA_SxCR_EN;
+        /* wait for tx done signal */
+        /* TODO: switch to interrupts */
+        /* xSemaphoreTake(tx_done, portMAX_DELAY); */
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        while (DMA1_Stream3->CR & DMA_SxCR_EN) {}  /* wait until DMA is done */
     }
 }

@@ -6,10 +6,14 @@
 #include "copter.h"
 #include "pid_control.h"
 
-uint16_t LastADCValue;
+static uint16_t LastADCValue;
+static const int OUTPUT_PERIOD = 10;
+int output_count = 0;
 
-void copter_task(void *param)
+void copter_task(void *_param)
 {
+    struct copter_task_param *param = (struct copter_task_param *)_param;
+
     /* setup GPIO pins for ADC1 */
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;
     MODIFY_REG(GPIOC->MODER, GPIO_MODER_MODER2, 0b11 << GPIO_MODER_MODER2_Pos);  /* set analog mode */
@@ -81,6 +85,22 @@ void copter_task(void *param)
 
         /* set motor pwm */
         TIM5->CCR1 = c;
+
+        /* output LastADCValue to serial port for testing */
+        if (output_count == 0) {
+            struct usart_buffer *buf;
+            if (xQueueReceive(param->usart3_tx_pool, &buf, 0) == pdPASS) {
+                buf->data[0] = LastADCValue >> 8;
+                buf->data[1] = LastADCValue >> 0;
+                buf->len = 2;
+                if (xQueueSend(param->usart3_tx_queue, &buf, 0) == errQUEUE_FULL) {
+                    /* put buffer back in pool if somehow full */
+                    /* TODO: create API functions for getting and sending buffers on a usart object */
+                    xQueueSend(param->usart3_tx_pool, &buf, 0);
+                }
+            }
+        }
+        output_count = (output_count + 1) % OUTPUT_PERIOD;
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }

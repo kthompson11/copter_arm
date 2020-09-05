@@ -1,0 +1,3 @@
+Requires the following npm packages:
+	serialport
+	crc

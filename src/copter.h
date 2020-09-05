@@ -3,7 +3,14 @@
 #ifndef COPTER_H
 #define COPTER_H
 
-extern uint16_t LastADCValue;
+#include <queue.h>
+
+#include "usart.h"
+
+struct copter_task_param {
+    QueueHandle_t usart3_tx_queue;
+    QueueHandle_t usart3_tx_pool;
+};
 
 void copter_task(void *param);
 
