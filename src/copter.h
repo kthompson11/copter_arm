@@ -8,8 +8,7 @@
 #include "usart.h"
 
 struct copter_task_param {
-    QueueHandle_t usart3_tx_queue;
-    QueueHandle_t usart3_tx_pool;
+    const struct usart *usart3;
 };
 
 void copter_task(void *param);

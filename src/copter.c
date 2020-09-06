@@ -88,17 +88,11 @@ void copter_task(void *_param)
 
         /* output LastADCValue to serial port for testing */
         if (output_count == 0) {
-            struct usart_buffer *buf;
-            if (xQueueReceive(param->usart3_tx_pool, &buf, 0) == pdPASS) {
-                buf->data[0] = LastADCValue >> 8;
-                buf->data[1] = LastADCValue >> 0;
-                buf->len = 2;
-                if (xQueueSend(param->usart3_tx_queue, &buf, 0) == errQUEUE_FULL) {
-                    /* put buffer back in pool if somehow full */
-                    /* TODO: create API functions for getting and sending buffers on a usart object */
-                    xQueueSend(param->usart3_tx_pool, &buf, 0);
-                }
-            }
+            uint8_t buf[2];
+            unsigned int len = 2;
+            buf[0] = LastADCValue >> 8;
+            buf[1] = LastADCValue >> 0;
+            usart_write(param->usart3, buf, len, 0);
         }
         output_count = (output_count + 1) % OUTPUT_PERIOD;
 
