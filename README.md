@@ -1,5 +1,41 @@
 # Copter Arm
 
+Copter Arm is a project that uses feedback control with a quadcopter motor and propellor to stabilize an arm at a desired angle. The angle is set by a GUI. The firmware runs on a NUCLEO-F767ZI board.
+
+## Components
+
+- gui - PyQt interface for controlling the arm
+- px4 - arm controller firmware
+
+## Requirements
+
+### Firmware
+
+- open source stlink tools (https://github.com/stlink-org/stlink)
+- a NUCLEO-F767ZI board
+- All the requirements for building PX4
+
+### GUI
+
+- Qt5
+- Additional python dependencies
+
+## Installation - Firmware
+
+1. Switch to the PX4 directory
+
+2. Build the firmware: `make stm_nucleo-f767zi`
+
+3. Flash the firmware: `st-flash --reset write build/stm_nucleo-f767zi_default/stm_nucleo-f767zi_default.bin 0x08000000`
+
+## Running the GUI
+
+1. Switch to the `gui` directory
+
+2. Run the GUI: `python3 copter_arm_control.py`
+
+# Copter Arm - Old
+
 Copter Arm is a simple project that uses feedback control with a quadcopter motor and propellor to stabilize an arm at a desired angle. The angle is set at compile time, but in the future will be settable using a web interface. The firmware runs on a NUCLEO-F767ZI board.
 
 ## Components
